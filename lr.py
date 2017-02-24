@@ -1,17 +1,34 @@
 import numpy as np
 import theano
+import sgd
 from theano import tensor
 
+def _zero(x):
+    return (x*0).sum()
+
+def _l1(x):
+    return abs(x.sum())
+
+def _l2(x):
+    return (x**2).sum()
+
+_REGULARIZATIONS = {
+    "none": _zero,
+    "l1": _l1,
+    "l2": _l2
+}
+
 class LogisticRegression(object):
-    def __init__(self, inp, n_in, n_out):
+    def __init__(self, x, y, n_in, n_out, reg="l2"):
         #matrix for input
-        self.input = inp
+        self.x = x
+        self.y = y
 
         #creating weights matrix w
         self.w = theano.shared(
             np.zeros(
                 shape=(n_in, n_out),
-                dtype=self.input.dtype),
+                dtype=self.x.dtype),
             name='w')
 
         #creating bias
@@ -21,25 +38,37 @@ class LogisticRegression(object):
                 dtype=self.w.dtype),
             name='b')
 
-        #output symbolic expression
+        #prob of y given x symbolic expression
         self.p_y_given_x = tensor.nnet.softmax(
-            tensor.dot(self.input, self.w) + self.b)
+            tensor.dot(self.x, self.w) + self.b)
 
         #prediction symbolic expression
         self.pred = tensor.argmax(self.p_y_given_x, axis=1)
 
-    def neg_log_likelihood(self, y):
-        y_indexes = tensor.arange(y.shape[0])
+        #score symbolic expression
+        self.score = tensor.mean(tensor.eq(self.pred, self.y))
+
+        m = self.x.shape[0]
+        #cost symbolic expression
         log_probs = tensor.log(self.p_y_given_x)
-        return -tensor.mean(log_probs[y_indexes, y])
+        y_indexes = tensor.arange(self.y.shape[0])
+        self.neg_log_likelihood = -log_probs[y_indexes, y]
+        self.cost = self.neg_log_likelihood.sum()/m
 
-    def score(self, y):
-        """Accuracy."""
-        #checking validity of arguments
-        if y.ndim != self.y_pred.ndim:
-            raise TypeError('y should have the same shape as self.y_pred',
-                ('y', y.type, 'y_pred', self.y_pred.type))
-        if not y.dtype.startswith('int'):
-            raise ValueError("labels (y) type should be integer")
+        #regularization term symbolic expression
+        if isinstance(reg, str):
+            try:
+                reg = _REGULARIZATIONS[reg]
+            except KeyError:
+                raise ValueError("'reg' must be one in [%s]" %\
+                    ", ".join(_REGULARIZATIONS.keys()))
+        self.reg = reg(self.w)/m
 
-        return tensor.mean(tensor.neq(self.pred, y))
+        #making gradient
+        self.g_cost_w = tensor.grad(cost=self.cost, wrt=self.w)
+        self.g_cost_b = tensor.grad(cost=self.cost, wrt=self.b)
+        self.g_reg_w = tensor.grad(cost=self.reg, wrt=self.w)
+        self.grad = [
+            (self.w, self.g_cost_w, self.g_reg_w),
+            (self.b, self.g_cost_b, 0)
+        ]
