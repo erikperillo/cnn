@@ -1,85 +1,109 @@
-#!/usr/bin/env python3
-
-
-from PIL import Image
-import pylab
 import numpy as np
 import theano
-from theano import tensor as T
+from theano import tensor
 from theano.tensor.signal import pool
-from theano.tensor.nnet import conv2d
 
+def _get_rng(rand_state=None):
+    if isinstance(rand_state, int) or rand_state is None:
+        return np.random.RandomState(rand_state)
+    return rand_state
 
-def imread(filepath):
-    img = Image.open(filepath)
-    return np.asarray(img, dtype=np.float64) / 255
+def _uniform_w_init(w_shape, n_in_maps, n_out_maps, filter_shape,
+        rand_state=42):
+    rng = _get_rng(rand_state)
+    filter_h, filter_w = filter_shape
+    bound = np.sqrt(n_in_maps*filter_w*filter_h)
+    return rng.uniform(low=-1/bound, high=1/bound, size=w_shape)
 
-def get_conv_layer(shape, relu=T.nnet.sigmoid, rand_seed=23455):
-    #initializing random weights
-    rng = np.random.RandomState(rand_seed)
+def _normal_w_init(w_shape, n_in_maps, n_out_maps, filter_shape,
+        rand_state=42):
+    rng = _get_rng(rand_state)
+    filter_h, filter_w = filter_shape
+    std = np.sqrt(n_in_maps*filter_w*filter_h)
+    return rng.normal(loc=0, scale=std, size=w_shape)
 
-    #instantiating 4D tensor for input
-    inp = T.tensor4(name='inp')
+_W_INIT_METHODS = {
+    "normal": _normal_w_init,
+    "uniform": _uniform_w_init
+}
 
-    #initializing shared variable for weights
-    assert len(shape) == 4
-    w_bound = np.sqrt(np.prod(shape))
-    weights = theano.shared(np.asarray(
-        rng.uniform(low=-1.0/w_bound, high=1.0/w_bound, size=shape),
-        dtype=inp.dtype), name='weights')
+class ConvolutionLayer:
+    def __init__(
+            self,
+            n_in_maps, n_out_maps, filter_shape,
+            activation_f=tensor.nnet.sigmoid,
+            w_init_f="normal",
+            rand_state=42):
 
-    #initializing shared variable for bias (1D tensor) with random values
-    bias_shp = (shape[0], )
-    bias = theano.shared(np.zeros(shape=bias_shp, dtype=inp.dtype), name='bias')
+        #checking validity of input method
+        if isinstance(w_init_f, str):
+            try:
+                w_init_f = _W_INIT_METHODS[w_init_f]
+            except KeyError:
+                raise ValueError("'w_init_method' must be one in [%s]" %\
+                    ", ".join(_W_INIT_METHODS.keys()))
 
-    #building symbolic expression that computes the convolution of input
-    #with filters in w
-    conv_out = conv2d(inp, weights)
+        #4D tensor for input
+        self.input = tensor.tensor4(name="input")
 
-    #building symbolic expression to add bias and apply activation function,
-    #i.e. produce neural net layer output
-    relu_out = relu(conv_out + bias.dimshuffle('x', 0, 'x', 'x'))
+        #creating weights tensor w
+        filter_h, filter_w = filter_shape
+        w_shape = (n_out_maps, n_in_maps, filter_h, filter_w)
+        self.w = theano.shared(
+            np.asarray(
+                w_init_f(
+                    w_shape,
+                    n_in_maps, n_out_maps, filter_shape,
+                    rand_state),
+                dtype=self.input.dtype),
+            name="w")
 
-    #creating theano function to compute filtered images
-    f = theano.function([inp], relu_out)
+        #creating bias
+        b_shape = (n_out_maps,)
+        b = theano.shared(
+            np.asarray(
+                _get_rng(rand_state).uniform(
+                    low=-0.5,
+                    high=0.5,
+                    size=b_shape),
+                dtype=self.input.dtype),
+            name="b")
+        self.b = b.dimshuffle("x", 0, "x", "x")
 
-    return f
+        #symbolic expression for convolution
+        conv_output = tensor.nnet.conv2d(self.input, self.w)
 
-def get_maxpool_layer(shape=(2, 2), ignore_border=True):
-    inp = T.dtensor4('inp')
-    pool_out = pool.pool_2d(inp, shape, ignore_border=True)
-    f = theano.function([inp], pool_out)
+        #symbolic expression for final output
+        self.output = activation_f(conv_output + self.b)
 
-    return f
+        #theano function to compute actual filtering
+        self.f = theano.function([self.input], self.output)
 
-def conv_layer_conv(f, img):
-    # dimensions are (height, width, channel)
-    # put image in 4D tensor of shape (1, 3, height, width)
-    img_ = img.transpose(2, 0, 1).reshape(1, 3, img.shape[0], img.shape[1])
-    filtered_img = f(img_)
+_POOLING_METHODS = {
+    "max": pool.pool_2d
+}
 
-    # plot original image and first and second components of output
-    pylab.subplot(1, 3, 1)
-    pylab.axis('off')
-    pylab.imshow(img)
-    pylab.gray()
+class PoolingLayer:
+    def __init__(
+            self,
+            shape,
+            pool_f="max",
+            ignore_border=True):
+        #checking validity of input method
+        if isinstance(pool_f, str):
+            try:
+                pool_f = _POOLING_METHODS[pool_f]
+            except KeyError:
+                raise ValueError("'method' must be one in [%s]" %\
+                    ", ".join(_POOLING_METHODS.keys()))
 
-    # recall that the convOp output (filtered image) is actually a "minibatch",
-    # of size 1 here, so we take index 0 in the first dimension:
-    pylab.subplot(1, 3, 2)
-    pylab.axis('off')
-    pylab.imshow(filtered_img[0, 0, :, :])
-    pylab.subplot(1, 3, 3)
-    pylab.axis('off')
-    pylab.imshow(filtered_img[0, 1, :, :])
-    pylab.show()
+        self.shape = shape
 
-def main():
-    print("reading image...")
-    img = imread("/home/erik/chinchin.jpg")
+        #4D tensor for input
+        self.input = tensor.tensor4(name="input")
 
-    print("done")
+        #symbolic expression for pooling
+        self.output = pool_f(self.input, shape, ignore_border=ignore_border)
 
-if __name__ == "__main__":
-    main()
-
+        #theano function to compute pooling
+        self.f = theano.function([self.input], self.output)
