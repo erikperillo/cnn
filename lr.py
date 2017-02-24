@@ -7,7 +7,7 @@ def _zero(x):
     return (x*0).sum()
 
 def _l1(x):
-    return abs(x.sum())
+    return abs(x).sum()
 
 def _l2(x):
     return (x**2).sum()
@@ -18,9 +18,16 @@ _REGULARIZATIONS = {
     "l2": _l2
 }
 
+def _grad(cost, wrt):
+    try:
+        return tensor.grad(cost=cost, wrt=wrt)
+    except theano.gradient.DisconnectedInputError:
+        return 0
+
 class LogisticRegression(object):
     def __init__(self, x, y, n_in, n_out, reg="l2"):
-        #matrix for input
+
+        #input/output matrices
         self.x = x
         self.y = y
 
@@ -45,8 +52,9 @@ class LogisticRegression(object):
         #prediction symbolic expression
         self.pred = tensor.argmax(self.p_y_given_x, axis=1)
 
-        #score symbolic expression
+        #score/erro symbolic expression (accuracy)
         self.score = tensor.mean(tensor.eq(self.pred, self.y))
+        self.error = 1 - tensor.mean(tensor.eq(self.pred, self.y))
 
         m = self.x.shape[0]
         #cost symbolic expression
@@ -64,11 +72,12 @@ class LogisticRegression(object):
                     ", ".join(_REGULARIZATIONS.keys()))
         self.reg = reg(self.w)/m
 
+        #model parameters
+        self.params = [self.w, self.b]
+
         #making gradient
-        self.g_cost_w = tensor.grad(cost=self.cost, wrt=self.w)
-        self.g_cost_b = tensor.grad(cost=self.cost, wrt=self.b)
-        self.g_reg_w = tensor.grad(cost=self.reg, wrt=self.w)
         self.grad = [
-            (self.w, self.g_cost_w, self.g_reg_w),
-            (self.b, self.g_cost_b, 0)
+            (p, _grad(self.cost, p), _grad(self.reg, p))
+            for p in self.params
         ]
+

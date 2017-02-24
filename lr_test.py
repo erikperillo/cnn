@@ -23,18 +23,34 @@ def main():
 
     clf = lr.LogisticRegression(x, y, x_data.shape[1], 2)
 
-    sgd.sgd(clf, x_data, y_data,
-        learning_rate=0.1,
-        reg_term=1,
-        batch_size=10,
-        rel_tol=None,
-        n_epochs=128,
-        verbose=True)
+    with_validation = True
+    if with_validation:
+        val_frac = 0.3
+        val_samples = int(n_samples*val_frac)
+        train_samples = n_samples - val_samples
+        x_tr, y_tr = x_data[:train_samples, :], y_data[:train_samples]
+        x_val, y_val = (x_data[train_samples:(train_samples+val_samples), :],
+            y_data[train_samples:(train_samples+val_samples)])
+        print("calling sgd_with_validation")
+        sgd.sgd_with_validation(clf,
+            x_tr, y_tr, x_val, y_val,
+            learning_rate=0.1, reg_term=1,
+            batch_size=32, n_epochs=1000,
+            max_its=10000, improv_thresh=0.01, max_its_incr=4,
+            rel_val_tol=1e-4,
+            verbose=False)
+    else:
+        print("calling sgd")
+        sgd.sgd(clf, x_data, y_data,
+            learning_rate=0.1,
+            reg_term=1,
+            batch_size=220,
+            rel_tol=2e-3,
+            n_epochs=256,
+            verbose=False)
 
-    print((y_data.dtype))
-    s = clf.score
-    f = theano.function([x, y], s)
-    print(f(x_data, y_data))
+    acc = theano.function([x, y], clf.score)
+    print("accuracy: %.2f%%" % (100*acc(x_data, y_data)))
 
 if __name__ == "__main__":
     main()
