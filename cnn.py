@@ -30,6 +30,7 @@ _W_INIT_METHODS = {
 class ConvolutionLayer:
     def __init__(
             self,
+            inp,
             n_in_maps, n_out_maps, filter_shape,
             activation_f=tensor.nnet.sigmoid,
             w_init_f="normal",
@@ -44,7 +45,7 @@ class ConvolutionLayer:
                     ", ".join(_W_INIT_METHODS.keys()))
 
         #4D tensor for input
-        self.input = tensor.tensor4(name="input")
+        self.input = inp
 
         #creating weights tensor w
         filter_h, filter_w = filter_shape
@@ -86,6 +87,7 @@ _POOLING_METHODS = {
 class PoolingLayer:
     def __init__(
             self,
+            inp,
             shape,
             pool_f="max",
             ignore_border=True):
@@ -100,7 +102,7 @@ class PoolingLayer:
         self.shape = shape
 
         #4D tensor for input
-        self.input = tensor.tensor4(name="input")
+        self.input = inp
 
         #symbolic expression for pooling
         self.output = pool_f(self.input, shape, ignore_border=ignore_border)

@@ -121,7 +121,7 @@ class MultiLayerPerceptron:
         #score symbolic expression (accuracy)
         self.score = self.log_reg_layer.score
 
-        m = self.x.shape[0]
+        #m = self.x.shape[0]
         #cost symbolic expression
         self.cost = self.log_reg_layer.cost
 
@@ -132,7 +132,7 @@ class MultiLayerPerceptron:
             except KeyError:
                 raise ValueError("'reg' must be one in [%s]" %\
                     ", ".join(_REGULARIZATIONS.keys()))
-        self.reg = (reg(self.hidden_layer.w) + reg(self.log_reg_layer.w))/m
+        self.reg = (reg(self.hidden_layer.w) + reg(self.log_reg_layer.w))#/m
 
         #model parameters
         self.params = self.hidden_layer.params + self.log_reg_layer.params

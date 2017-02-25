@@ -56,12 +56,12 @@ class LogisticRegression(object):
         self.score = tensor.mean(tensor.eq(self.pred, self.y))
         self.error = 1 - tensor.mean(tensor.eq(self.pred, self.y))
 
-        m = self.x.shape[0]
+        #m = self.x.shape[0]
         #cost symbolic expression
         log_probs = tensor.log(self.p_y_given_x)
         y_indexes = tensor.arange(self.y.shape[0])
         self.neg_log_likelihood = -log_probs[y_indexes, y]
-        self.cost = self.neg_log_likelihood.sum()/m
+        self.cost = self.neg_log_likelihood.sum()#/m
 
         #regularization term symbolic expression
         if isinstance(reg, str):
@@ -70,7 +70,7 @@ class LogisticRegression(object):
             except KeyError:
                 raise ValueError("'reg' must be one in [%s]" %\
                     ", ".join(_REGULARIZATIONS.keys()))
-        self.reg = reg(self.w)/m
+        self.reg = reg(self.w)#/m
 
         #model parameters
         self.params = [self.w, self.b]

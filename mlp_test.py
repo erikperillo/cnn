@@ -9,7 +9,7 @@ from theano import tensor
 import gzip
 import pickle
 
-DATA_FILEPATH = "./data/mnist.pkl.gz"
+DATA_FILEPATH = "../data/mnist.pkl.gz"
 
 def load_data(filepath):
     with gzip.open(filepath, "rb") as f:
@@ -39,7 +39,7 @@ def main():
     y = tensor.ivector(name="y")
 
     clf = mlp.MultiLayerPerceptron(x, y,
-        n_in=x_tr.shape[1], n_hidden=256, n_out=10)
+        n_in=x_tr.shape[1], n_hidden=64, n_out=10)
 
     acc = theano.function([x, y], clf.score)
     with_validation = True
@@ -53,11 +53,11 @@ def main():
         y_te = np.array(y_te, dtype="int32")
         sgd.sgd_with_validation(clf,
             x_tr, y_tr, x_cv, y_cv,
-            learning_rate=0.01, reg_term=1,
-            batch_size=128, n_epochs=1000,
+            learning_rate=0.01, reg_term=0.00005,
+            batch_size=256, n_epochs=1000,
             max_its=5000, improv_thresh=0.01, max_its_incr=4,
-            rel_val_tol=5e-2,
-            val_freq=50,
+            rel_val_tol=5e-3,
+            val_freq="auto",
             verbose=True)
         print("accuracy: %.2f%%" % (100*acc(x_te, y_te)))
     else:
