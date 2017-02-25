@@ -25,17 +25,16 @@ def _grad(cost, wrt):
         return 0
 
 class LogisticRegression(object):
-    def __init__(self, x, y, n_in, n_out, reg="l2"):
+    def __init__(self, inp, n_in, n_out, reg="l2"):
 
         #input/output matrices
-        self.x = x
-        self.y = y
+        self.inp = inp
 
         #creating weights matrix w
         self.w = theano.shared(
             np.zeros(
                 shape=(n_in, n_out),
-                dtype=self.x.dtype),
+                dtype=self.inp.dtype),
             name='w')
 
         #creating bias
@@ -47,21 +46,13 @@ class LogisticRegression(object):
 
         #prob of y given x symbolic expression
         self.p_y_given_x = tensor.nnet.softmax(
-            tensor.dot(self.x, self.w) + self.b)
+            tensor.dot(self.inp, self.w) + self.b)
 
         #prediction symbolic expression
         self.pred = tensor.argmax(self.p_y_given_x, axis=1)
 
-        #score/erro symbolic expression (accuracy)
-        self.score = tensor.mean(tensor.eq(self.pred, self.y))
-        self.error = 1 - tensor.mean(tensor.eq(self.pred, self.y))
-
-        #m = self.x.shape[0]
-        #cost symbolic expression
-        log_probs = tensor.log(self.p_y_given_x)
-        y_indexes = tensor.arange(self.y.shape[0])
-        self.neg_log_likelihood = -log_probs[y_indexes, y]
-        self.cost = self.neg_log_likelihood.sum()#/m
+        #model parameters
+        self.params = [self.w, self.b]
 
         #regularization term symbolic expression
         if isinstance(reg, str):
@@ -70,14 +61,13 @@ class LogisticRegression(object):
             except KeyError:
                 raise ValueError("'reg' must be one in [%s]" %\
                     ", ".join(_REGULARIZATIONS.keys()))
-        self.reg = reg(self.w)#/m
+        self.reg = reg(self.w)
 
-        #model parameters
-        self.params = [self.w, self.b]
+    def cost(self, y):
+        y_indexes = tensor.arange(y.shape[0])
+        log_probs = tensor.log(self.p_y_given_x)
+        neg_log_likelihood = -log_probs[y_indexes, y]
+        return neg_log_likelihood.sum()
 
-        #making gradient
-        self.grad = [
-            (p, _grad(self.cost, p), _grad(self.reg, p))
-            for p in self.params
-        ]
-
+    def score(self, y):
+        return tensor.mean(tensor.eq(self.pred, y))

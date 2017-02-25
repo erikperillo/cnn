@@ -21,7 +21,7 @@ def main():
     x = tensor.matrix(name="x")
     y = tensor.ivector(name="y")
 
-    clf = lr.LogisticRegression(x, y, x_data.shape[1], 2)
+    clf = lr.LogisticRegression(x, x_data.shape[1], 2)
 
     with_validation = True
     if with_validation:
@@ -34,22 +34,23 @@ def main():
         print("calling sgd_with_validation")
         sgd.sgd_with_validation(clf,
             x_tr, y_tr, x_val, y_val,
-            learning_rate=0.1, reg_term=1,
+            learning_rate=0.01, reg_term=0.0001,
             batch_size=32, n_epochs=1000,
             max_its=10000, improv_thresh=0.01, max_its_incr=4,
-            rel_val_tol=1e-4,
-            verbose=False)
+            rel_val_tol=1e-3,
+            verbose=True)
     else:
         print("calling sgd")
-        sgd.sgd(clf, x_data, y_data,
-            learning_rate=0.1,
-            reg_term=1,
+        sgd.sgd(clf, 
+            x_data, y_data, y=y,
+            learning_rate=0.01,
+            reg_term=0.0001,
             batch_size=220,
             rel_tol=2e-3,
             n_epochs=256,
-            verbose=False)
+            verbose=True)
 
-    acc = theano.function([x, y], clf.score)
+    acc = theano.function([x, y], clf.score(y))
     print("accuracy: %.2f%%" % (100*acc(x_data, y_data)))
 
 if __name__ == "__main__":

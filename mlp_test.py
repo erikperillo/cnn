@@ -38,10 +38,10 @@ def main():
     x = tensor.matrix(name="x")
     y = tensor.ivector(name="y")
 
-    clf = mlp.MultiLayerPerceptron(x, y,
+    clf = mlp.MultiLayerPerceptron(x,
         n_in=x_tr.shape[1], n_hidden=64, n_out=10)
 
-    acc = theano.function([x, y], clf.score)
+    acc = theano.function([x, y], clf.score(y))
     with_validation = True
     x_tr = np.array(x_tr, dtype="float64")
     y_tr = np.array(y_tr, dtype="int32")

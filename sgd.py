@@ -3,6 +3,12 @@ from theano import tensor
 import time
 import numpy as np
 
+def _grad(cost, wrt):
+    try:
+        return tensor.grad(cost=cost, wrt=wrt)
+    except theano.gradient.DisconnectedInputError:
+        return 0
+
 def _none_or_num(num, after_point_digits=6):
     if num is None:
         return "None"
@@ -27,17 +33,16 @@ def sgd(est,
         learning_rate=0.1, reg_term=0.1,
         batch_size=1, n_epochs=None,
         max_its=10000, rel_tol=1e-3,
+        y=tensor.ivector(name="y"),
         verbose=True, print_flush_period=100):
     """
     Stochastic Gradient Descent with regularization.
     Parameters:
     *est: Estimator object. It must have the following attributes:
-        .x: input
-        .y: output
-        .cost: cost function (without regularization term)
+        .inp: input
+        .cost(y): cost function (without regularization term)
         .reg: regularization term of cost function
-        .grad: list of tuples in format
-            (param, g_cost_wrt_param, g_reg_wrt_param)
+        .params: iterable with model parameters
     *x_data: x input matrix.
     *y_data: y output vector.
     *learning_rate: Learning rate.
@@ -47,6 +52,7 @@ def sgd(est,
         If None, runs until another stopping criteria.
     *max_its: Maximum number of iterations to run.
     *rel_tol: Relative difference of current/last batch cost. Not used if None.
+    *y: Output vector.
     *verbose: Print info if True, print nothing otherwise.
     *print_flush_period: Period to flush printed information.
     """
@@ -68,19 +74,22 @@ def sgd(est,
     y_data_shared = theano.shared(np.asarray(y_data, dtype=y_data.dtype),
         borrow=True)
 
+    #parameters gradient of estimator
+    grad = [(p, _grad(est.cost(y), p), _grad(est.reg, p)) for p in est.params]
+
     #updates variables
-    updates = [(var, var - learning_rate*(d_cost_var + reg_term*d_reg_var)) \
-        for var, d_cost_var, d_reg_var in est.grad]
+    updates = [(p, p - learning_rate*(d_cost_p + reg_term*d_reg_p)) \
+        for p, d_cost_p, d_reg_p in grad]
 
     #compiling function
     info("making func...", end="", flush=True)
     train_f = theano.function(
         inputs=[index],
-        outputs=est.cost,
+        outputs=est.cost(y),
         updates=updates,
         givens={
-            est.x: x_data_shared[index*batch_size:(index+1)*batch_size],
-            est.y: y_data_shared[index*batch_size:(index+1)*batch_size]
+            est.inp: x_data_shared[index*batch_size:(index+1)*batch_size],
+            y: y_data_shared[index*batch_size:(index+1)*batch_size]
         })
     info(" done")
 
@@ -156,18 +165,17 @@ def sgd_with_validation(est,
         batch_size=1, n_epochs=10,
         max_its=5000, improv_thresh=0.01, max_its_incr=4,
         rel_val_tol=1e-3, val_freq="auto",
+        y=tensor.ivector(name="y"),
         verbose=True, print_flush_period=100):
     """
     Stochastic Gradient Descent with regularization using validation set.
     Parameters:
     *est: Estimator object. It must have the following attributes:
-        .x: input
-        .y: output
-        .cost: cost function (without regularization term)
+        .inp: input
+        .cost(y): cost function (without regularization term)
         .reg: regularization term of cost function
-        .grad: list of tuples in format
-            (param, g_cost_wrt_param, g_reg_wrt_param)
-        .score: accuracy (in [0, 1])
+        .params: iterable with model parameters
+        .score(y): accuracy function (in [0, 1])
     *x_train_data: x train input matrix.
     *y_train_data: y train output vector.
     *x_val_data: x validation input matrix.
@@ -183,6 +191,7 @@ def sgd_with_validation(est,
     *max_its_incr: Max iterations to increase when finding a new best val_score.
     *rel_val_tol: If abs(1 - new_val_score/old_val_score) <= rel_val_tol, stop.
     *val_freq: Frequency (in batches) to perform validation.
+    *y: Output vector.
     *verbose: Print info if True, print nothing otherwise.
     *print_flush_period: Period to flush printed information.
     """
@@ -209,27 +218,30 @@ def sgd_with_validation(est,
     y_val_data_shared = theano.shared(
         np.asarray(y_val_data, dtype=y_val_data.dtype), borrow=True)
 
+    #parameters gradient of estimator
+    grad = [(p, _grad(est.cost(y), p), _grad(est.reg, p)) for p in est.params]
+
     #updates variables
-    updates = [(var, var - learning_rate*(d_cost_var + reg_term*d_reg_var)) \
-        for var, d_cost_var, d_reg_var in est.grad]
+    updates = [(p, p - learning_rate*(d_cost_p + reg_term*d_reg_p)) \
+        for p, d_cost_p, d_reg_p in grad]
 
     #compiling functions
     info("making train/val func...", end="", flush=True)
     train_f = theano.function(
         inputs=[index],
-        outputs=est.cost,
+        outputs=est.cost(y),
         updates=updates,
         givens={
-            est.x: x_train_data_shared[index*batch_size:(index+1)*batch_size],
-            est.y: y_train_data_shared[index*batch_size:(index+1)*batch_size]
+            est.inp: x_train_data_shared[index*batch_size:(index+1)*batch_size],
+            y: y_train_data_shared[index*batch_size:(index+1)*batch_size]
         })
     val_f = theano.function(
         inputs=[index],
-        outputs=est.score,
+        outputs=est.score(y),
         updates=updates,
         givens={
-            est.x: x_val_data_shared[index*batch_size:(index+1)*batch_size],
-            est.y: y_val_data_shared[index*batch_size:(index+1)*batch_size]
+            est.inp: x_val_data_shared[index*batch_size:(index+1)*batch_size],
+            y: y_val_data_shared[index*batch_size:(index+1)*batch_size]
         })
     info(" done")
 
@@ -295,7 +307,8 @@ def sgd_with_validation(est,
                 if last_val_score and rel_val_tol:
                     rel_val_score = abs(1 - last_val_score/val_score)
                     if rel_val_score <= rel_val_tol:
-                        info("\nWARNING: rel_val_tol criteria matched")
+                        info("\nWARNING: rel_val_tol criteria matched (%f)" %\
+                            rel_val_score)
                         done_looping = True
                         stop_crit = "rel_val_tol"
                         break

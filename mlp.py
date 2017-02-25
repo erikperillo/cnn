@@ -96,7 +96,7 @@ class HiddenLayer(object):
 class MultiLayerPerceptron:
     def __init__(
             self, 
-            x, y,
+            inp,
             n_in, n_hidden, n_out,
             activation_f=tensor.tanh,
             w_init_f="xavier_tanh",
@@ -104,26 +104,21 @@ class MultiLayerPerceptron:
             rand_state=42):
 
         #input/output matrices
-        self.x = x
-        self.y = y
+        self.inp = inp
 
         #hidden layer
         self.hidden_layer = HiddenLayer(
-            inp=x,
+            inp=inp,
             n_in=n_in, n_out=n_hidden,
             activation_f=activation_f)
 
         #logistic regression layer
         self.log_reg_layer = lr.LogisticRegression(
-            x=self.hidden_layer.output, y=y,
+            inp=self.hidden_layer.output,
             n_in=n_hidden, n_out=n_out)
 
-        #score symbolic expression (accuracy)
-        self.score = self.log_reg_layer.score
-
-        #m = self.x.shape[0]
-        #cost symbolic expression
-        self.cost = self.log_reg_layer.cost
+        #model parameters
+        self.params = self.hidden_layer.params + self.log_reg_layer.params
 
         #regularization term symbolic expression
         if isinstance(reg, str):
@@ -134,11 +129,8 @@ class MultiLayerPerceptron:
                     ", ".join(_REGULARIZATIONS.keys()))
         self.reg = (reg(self.hidden_layer.w) + reg(self.log_reg_layer.w))#/m
 
-        #model parameters
-        self.params = self.hidden_layer.params + self.log_reg_layer.params
+        #cost(y) function
+        self.cost = self.log_reg_layer.cost
 
-        #making gradient
-        self.grad = [
-            (p, _grad(self.cost, p), _grad(self.reg, p))
-            for p in self.params
-        ]
+        #score(y) function
+        self.score = self.log_reg_layer.score
