@@ -96,6 +96,9 @@ class ConvolutionLayer:
             name="b")
         self.b = b.dimshuffle("x", 0, "x", "x")
 
+        #parameters
+        self.params = [self.w, self.b]
+
         #symbolic expression for convolution
         conv_output = tensor.nnet.conv2d(self.input, self.w)
 
@@ -135,6 +138,8 @@ class PoolingLayer:
         #theano function to compute pooling
         self.f = theano.function([self.input], self.output)
 
+        self.params = []
+
 class ConvolutionalNeuralNetwork:
     def __init__(
             self,
@@ -151,7 +156,7 @@ class ConvolutionalNeuralNetwork:
 
             #input for layer
             layer["input"] = self.inp if i == 0 else \
-                conv_pool_layers[i-1]["output"]
+                self.conv_pool_layers[i-1]["output"]
 
             #creating convolution layer
             conv = ConvolutionLayer(
@@ -165,7 +170,7 @@ class ConvolutionalNeuralNetwork:
             #creating pooling layer if required
             if pool_params is not None:
                 pool = PoolingLayer(
-                    inp=conv_layer.output,
+                    inp=conv.output,
                     **pool_params)
                 layer["pool"] = pool
                 #updating parameters

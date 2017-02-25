@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import cnn
 import mlp
 import pandas as pd
 import numpy as np
@@ -38,8 +39,46 @@ def main():
     x = tensor.matrix(name="x")
     y = tensor.ivector(name="y")
 
-    clf = mlp.MultiLayerPerceptron(x,
-        n_in=x_tr.shape[1], n_hidden=64, n_out=10)
+    layer_0_params = (
+        {#conv
+            "n_in_maps": 1,
+            "n_out_maps": 4,
+            "filter_shape": (5, 5),
+        },
+        {#pool
+            "shape": (2, 2)
+        }
+    )
+
+    layer_1_params = (
+        {#conv
+            "n_in_maps": 4,
+            "n_out_maps": 8,
+            "filter_shape": (5, 5),
+        },
+        {#pool
+            "shape": (2, 2)
+        }
+    )
+
+    fully_connected_layer_params = {
+        "n_in": 8*4*4,
+        "n_hidden": 32,
+        "n_out": 10
+    }
+
+    batch_size = 64
+    inp = x.reshape((batch_size, 1, 28, 28))
+
+    clf = cnn.ConvolutionalNeuralNetwork(
+        inp=inp,
+        conv_pool_layers_params=[
+            layer_0_params,
+            layer_1_params],
+        fully_connected_layer_params=fully_connected_layer_params)
+
+    print("ok")
+    exit()
 
     acc = theano.function([x, y], clf.score(y))
     with_validation = True
