@@ -54,6 +54,7 @@ class HiddenLayer(object):
             n_in, n_out,
             activation_f=tensor.tanh,
             w_init_f="xavier_tanh",
+            reg="l2",
             rand_state=42):
 
         #checking validity of input method
@@ -73,6 +74,15 @@ class HiddenLayer(object):
                 w_init_f(n_in, n_out),
                 dtype=self.input.dtype),
             name="w")
+
+        #regularization term symbolic expression
+        if isinstance(reg, str):
+            try:
+                reg = _REGULARIZATIONS[reg]
+            except KeyError:
+                raise ValueError("'reg' must be one in [%s]" %\
+                    ", ".join(_REGULARIZATIONS.keys()))
+        self.reg = reg(self.w)
 
         #creating bias
         self.b = theano.shared(
@@ -100,7 +110,7 @@ class MultiLayerPerceptron:
             n_in, n_hidden, n_out,
             activation_f=tensor.tanh,
             w_init_f="xavier_tanh",
-            reg="l2",
+            hl_reg="l2", lr_reg="l2",
             rand_state=42):
 
         #input/output matrices
@@ -110,24 +120,20 @@ class MultiLayerPerceptron:
         self.hidden_layer = HiddenLayer(
             inp=inp,
             n_in=n_in, n_out=n_hidden,
-            activation_f=activation_f)
+            activation_f=activation_f,
+            reg=hl_reg)
 
         #logistic regression layer
         self.log_reg_layer = lr.LogisticRegression(
             inp=self.hidden_layer.output,
-            n_in=n_hidden, n_out=n_out)
+            n_in=n_hidden, n_out=n_out,
+            reg=lr_reg)
 
         #model parameters
         self.params = self.hidden_layer.params + self.log_reg_layer.params
 
         #regularization term symbolic expression
-        if isinstance(reg, str):
-            try:
-                reg = _REGULARIZATIONS[reg]
-            except KeyError:
-                raise ValueError("'reg' must be one in [%s]" %\
-                    ", ".join(_REGULARIZATIONS.keys()))
-        self.reg = (reg(self.hidden_layer.w) + reg(self.log_reg_layer.w))#/m
+        self.reg = self.hidden_layer.reg + self.log_reg_layer.reg
 
         #cost(y) function
         self.cost = self.log_reg_layer.cost

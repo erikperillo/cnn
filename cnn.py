@@ -27,6 +27,21 @@ _W_INIT_METHODS = {
     "uniform": _uniform_w_init
 }
 
+def _zero(x):
+    return (x*0).sum()
+
+def _l1(x):
+    return abs(x).sum()
+
+def _l2(x):
+    return (x**2).sum()
+
+_REGULARIZATIONS = {
+    "none": _zero,
+    "l1": _l1,
+    "l2": _l2
+}
+
 class ConvolutionLayer:
     def __init__(
             self,
@@ -34,6 +49,7 @@ class ConvolutionLayer:
             n_in_maps, n_out_maps, filter_shape,
             activation_f=tensor.nnet.sigmoid,
             w_init_f="normal",
+            reg="l2",
             rand_state=42):
 
         #checking validity of input method
@@ -58,6 +74,15 @@ class ConvolutionLayer:
                     rand_state),
                 dtype=self.input.dtype),
             name="w")
+
+        #regularization term symbolic expression
+        if isinstance(reg, str):
+            try:
+                reg = _REGULARIZATIONS[reg]
+            except KeyError:
+                raise ValueError("'reg' must be one in [%s]" %\
+                    ", ".join(_REGULARIZATIONS.keys()))
+        self.reg = reg(self.w)
 
         #creating bias
         b_shape = (n_out_maps,)
@@ -109,3 +134,60 @@ class PoolingLayer:
 
         #theano function to compute pooling
         self.f = theano.function([self.input], self.output)
+
+class ConvolutionalNeuralNetwork:
+    def __init__(
+            self,
+            inp,
+            conv_pool_layers_params,
+            fully_connected_layer_params):
+
+        self.inp = inp
+        self.params = []
+
+        self.conv_pool_layers = []
+        for i, (conv_params, pool_params) in enumerate(conv_pool_layers_params):
+            layer = {"pool": None}
+
+            #input for layer
+            layer["input"] = self.inp if i == 0 else \
+                conv_pool_layers[i-1]["output"]
+
+            #creating convolution layer
+            conv = ConvolutionLayer(
+                inp=layer["input"],
+                **conv_params)
+            layer["conv"] = conv
+
+            #layer parameters
+            layer["params"] = conv.params
+
+            #creating pooling layer if required
+            if pool_params is not None:
+                pool = PoolingLayer(
+                    inp=conv_layer.output,
+                    **pool_params)
+                layer["pool"] = pool
+                #updating parameters
+                layer["params"] += pool.params
+
+            #layer output
+            layer["output"] = pool.output if layer["pool"] else conv.output
+
+            self.conv_pool_layers.append(layer)
+            self.params.extend(layer["params"])
+
+        self.fully_connected_layer = mlp.MultiLayerPerceptron(
+            inp=conv_pool_layers[-1]["output"].flatten(2),
+            **fully_connected_layer_params)
+
+        self.params.extend(self.fully_connected_layer.params)
+
+        self.output = self.fully_connected_layer.output
+
+        self.cost = self.fully_connected_layer.cost
+
+        self.score = self.fully_connected_layer.score
+
+        self.reg = self.fully_connected_layer.reg +\
+            sum(layer["conv"].reg for layer in self.conv_pool_layers)

@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 
+import mlp
 import pandas as pd
 import numpy as np
 import theano
-from theano import tensor
 import sgd
-import cnn
-import mlp
+from theano import tensor
 import gzip
 import pickle
 
@@ -36,61 +35,41 @@ def main():
     print("\tcv:", x_cv.shape, y_cv.shape)
     print("\ttest:", x_te.shape, y_te.shape)
 
-    #BUILDING LENET
-    x = tensor.matrix("x")
-    y = tensor.ivector("y")
+    x = tensor.matrix(name="x")
+    y = tensor.ivector(name="y")
 
-    batch_size = 32
-    imgs_h, imgs_w = 28, 28
+    clf = mlp.MultiLayerPerceptron(x,
+        n_in=x_tr.shape[1], n_hidden=64, n_out=10)
 
-    #input
-    cnn_input = x.reshape((batch_size, 1, imgs_h, imgs_w))
-
-    #layer 0:
-    n_layer_0_out_maps = 3
-    #conv layer
-    layer_0_conv = cnn.ConvolutionLayer(
-        inp=layer_0_input,
-        n_in_maps=1,
-        n_out_maps=n_layer_0_out_maps,
-        filter_shape=(5, 5),
-        activation_f=tensor.nnet.sigmoid,
-        w_init_f="normal")
-    #pooling layer
-    layer_0_pool = cnn.PoolingLayer(
-        inp=layer_0_conv.output,
-        shape=(2, 2),
-        pool_f="max",
-        ignore_border=True)
-
-    #layer 1:
-    n_layer_1_out_maps = 9
-    #conv layer
-    layer_1_conv = cnn.ConvolutionLayer(
-        inp=layer_0_pool.output,
-        n_in_maps=n_layer_0_out_maps,
-        n_out_maps=n_layer_1_out_maps,
-        filter_shape=(5, 5),
-        activation_f=tensor.nnet.sigmoid,
-        w_init_f="normal")
-    #pooling layer
-    layer_1_pool = cnn.PoolingLayer(
-        inp=layer_1_conv.output,
-        shape=(2, 2),
-        pool_f="max",
-        ignore_border=True)
-
-    #layer 2 (fully connected):
-    layer_2_input = layer_1_pool.output.flatten(2)
-    cnn_output = tensor.ivector("cnn_output")
-    layer_2_mlp = mlp.MultiLayerPerceptron(
-        x=layer_2_input, y=cnn_output,
-        n_in=n_layer_1_out_maps*4*4,
-        n_hidden=64,
-        n_out=10,
-        activation_f=tensor.tanh,
-        w_init_f="xavier_tanh",
-        reg="l2")
+    acc = theano.function([x, y], clf.score(y))
+    with_validation = True
+    x_tr = np.array(x_tr, dtype="float64")
+    y_tr = np.array(y_tr, dtype="int32")
+    if with_validation:
+        print("calling sgd_with_validation", flush=True)
+        x_cv = np.array(x_cv, dtype="float64")
+        x_te = np.array(x_te, dtype="float64")
+        y_cv = np.array(y_cv, dtype="int32")
+        y_te = np.array(y_te, dtype="int32")
+        sgd.sgd_with_validation(clf,
+            x_tr, y_tr, x_cv, y_cv,
+            learning_rate=0.01, reg_term=0.00005,
+            batch_size=256, n_epochs=1000,
+            max_its=5000, improv_thresh=0.01, max_its_incr=4,
+            rel_val_tol=5e-3,
+            val_freq="auto",
+            verbose=True)
+        print("accuracy: %.2f%%" % (100*acc(x_te, y_te)))
+    else:
+        print("calling sgd")
+        sgd.sgd(clf, x_tr, y_tr,
+            learning_rate=0.1,
+            reg_term=1,
+            batch_size=32,
+            rel_tol=2e-3,
+            n_epochs=128,
+            verbose=True)
+        print("accuracy: %.2f%%" % (100*acc(x_tr, y_tr)))
 
 if __name__ == "__main__":
     main()
