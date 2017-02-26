@@ -43,11 +43,11 @@ def main():
     y = tensor.ivector(name="y")
 
     clf = mlp.MultiLayerPerceptron(x,
-        n_in=x_tr.shape[1], n_hidden=64, n_out=10)
+        n_inp=x_tr.shape[1], n_hidden=64, n_out=10)
 
     acc = theano.function([x, y], clf.score(y))
 
-    with_validation = False
+    with_validation = True
 
     x_tr_sh = theano.shared(x_tr, borrow=True)
     y_tr_sh = theano.shared(y_tr, borrow=True)

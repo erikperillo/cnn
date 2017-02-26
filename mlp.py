@@ -21,6 +21,7 @@ def _xavier_sigmoid_w_init(n_inp, n_out, rand_state=42):
     bound = 4*np.sqrt(6/(n_inp + n_out))
     return rng.uniform(low=-bound, high=bound, size=(n_inp, n_out))
 
+#Weight initialization methods for convolution layer.
 _W_INIT_METHODS = {
     "xavier_tanh": _xavier_sigmoid_w_init,
     "xavier_sigmoid": _xavier_sigmoid_w_init
@@ -35,6 +36,7 @@ def _l1(x):
 def _l2(x):
     return (x**2).sum()
 
+#Regularization methods for weights.
 _REGULARIZATIONS = {
     "none": _zero,
     "l1": _l1,
@@ -47,7 +49,10 @@ def _grad(cost, wrt):
     except theano.gradient.DisconnectedInputError:
         return 0
 
-class HiddenLayer(object):
+class HiddenLayer:
+    """
+    Hidden Layer for Multi Layer Perceptron.
+    """
     def __init__(
             self, 
             inp,
@@ -56,6 +61,17 @@ class HiddenLayer(object):
             w_init_f="xavier_tanh",
             reg="l2",
             rand_state=42):
+        """
+        Initialization of layer.
+        Parameters:
+        *inp: Input tensor.
+        *n_inp: Number of input neurons.
+        *n_out: Number of outut neurons.
+        *activation_f: Activation function to use.
+        *w_init_f: Weight initialization method.
+        *reg: Regularization method for weights.
+        *rand_state: Random state.
+        """
 
         #checking validity of input method
         if isinstance(w_init_f, str):
@@ -65,7 +81,7 @@ class HiddenLayer(object):
                 raise ValueError("'w_init_method' must be one in [%s]" %\
                     ", ".join(_W_INIT_METHODS.keys()))
 
-        #matrix for input
+        #input
         self.input = inp
 
         #creating weights matrix w
@@ -94,6 +110,9 @@ class HiddenLayer(object):
                 dtype=self.input.dtype),
             name="b")
 
+        #model parameters
+        self.params = [self.w, self.b]
+
         #symbolic expression for output
         linear_output = tensor.dot(self.input, self.w) + self.b
         self.output = activation_f(linear_output)
@@ -101,17 +120,30 @@ class HiddenLayer(object):
         #theano function to compute output
         self.f = theano.function([self.input], self.output)
 
-        self.params = [self.w, self.b]
-
 class MultiLayerPerceptron:
+    """
+    Multi Layer Perceptron.
+    """
     def __init__(
             self, 
             inp,
             n_inp, n_hidden, n_out,
             activation_f=tensor.tanh,
             w_init_f="xavier_tanh",
-            hl_reg="l2", lr_reg="l2",
+            reg="l2",
             rand_state=42):
+        """
+        Initialization of network.
+        Parameters:
+        *inp: Input tensor.
+        *n_inp: Number of input neurons.
+        *n_hidden: Number of hidden neurons.
+        *n_out: Number of outut neurons.
+        *activation_f: Activation function to use.
+        *w_init_f: Weight initialization method.
+        *reg: Regularization method for weights.
+        *rand_state: Random state.
+        """
 
         #input/output matrices
         self.inp = inp
@@ -121,13 +153,13 @@ class MultiLayerPerceptron:
             inp=inp,
             n_inp=n_inp, n_out=n_hidden,
             activation_f=activation_f,
-            reg=hl_reg)
+            reg=reg)
 
         #logistic regression layer
         self.log_reg_layer = lr.LogisticRegression(
             inp=self.hidden_layer.output,
             n_inp=n_hidden, n_out=n_out,
-            reg=lr_reg)
+            reg=reg)
 
         #model parameters
         self.params = self.hidden_layer.params + self.log_reg_layer.params

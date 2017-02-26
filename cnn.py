@@ -34,6 +34,7 @@ def _normal_w_init(w_shape, n_inp_maps, n_out_maps, filter_shape,
     std = np.sqrt(n_inp_maps*filter_w*filter_h)
     return rng.normal(loc=0, scale=std, size=w_shape)
 
+#Weight initialization methods for convolution layer.
 _W_INIT_METHODS = {
     "normal": _normal_w_init,
     "uniform": _uniform_w_init
@@ -48,6 +49,7 @@ def _l1(x):
 def _l2(x):
     return (x**2).sum()
 
+#Regularization methods for weights.
 _REGULARIZATIONS = {
     "none": _zero,
     "l1": _l1,
@@ -55,6 +57,9 @@ _REGULARIZATIONS = {
 }
 
 class ConvolutionLayer:
+    """
+    Convolution layer for Convolutional Neural Network.
+    """
     def __init__(
             self,
             inp,
@@ -64,6 +69,18 @@ class ConvolutionLayer:
             w_init_f="normal",
             reg="l2",
             rand_state=42):
+        """
+        Initialization of layer.
+        Parameters:
+        *inp: Input tensor.
+        *n_inp_maps: Number of input maps.
+        *inp_maps_shape: Input maps shape in format (rows, cols).
+        *n_out_maps: Number of output maps.
+        *activation_f: Activation function to use.
+        *w_init_f: Weight initialization method.
+        *reg: Regularization method for weights.
+        *rand_state: Random state.
+        """
 
         #checking validity of input method
         if isinstance(w_init_f, str):
@@ -73,7 +90,7 @@ class ConvolutionLayer:
                 raise ValueError("'w_init_method' must be one in [%s]" %\
                     ", ".join(_W_INIT_METHODS.keys()))
 
-        #4D tensor for input
+        #input
         self.inp = inp
 
         #storing parameters
@@ -126,10 +143,10 @@ class ConvolutionLayer:
         self.output = activation_f(
             conv_output + self.b.dimshuffle("x", 0, "x", "x"))
 
-        #theano function to compute actual filtering
-        #self.f = theano.function([self.inp], self.output)
-
 class PoolingLayer:
+    """
+    Pooling layer for Convolutional Neural Network.
+    """
     def __init__(
             self,
             inp,
@@ -137,8 +154,17 @@ class PoolingLayer:
             stride=None,
             mode="max",
             ignore_border=True):
+        """
+        Initialization of layer.
+        Parameters:
+        *inp: Input tensor.
+        *shape: Pooling shape in form (rows, cols).
+        *stride: Pooling stride. If None, stride = shape.
+        *mode: Pooling mode.
+        *ignore_border: Ignore border.
+        """
 
-        #4D tensor for input
+        #input
         self.inp = inp
 
         #attributes
@@ -146,23 +172,38 @@ class PoolingLayer:
         self.ignore_border = ignore_border
         self.stride = shape if stride is None else stride
 
+        #parameters
+        self.params = []
+
         #symbolic expression for pooling
         self.output = pool.pool_2d(self.inp,
             ds=shape,
             ignore_border=ignore_border,
             st=stride)
 
-        #theano function to compute pooling
-        #self.f = theano.function([self.inp], self.output)
-
-        self.params = []
-
 class ConvolutionalNeuralNetwork:
+    """
+    Convolutinal Neural Network.
+    """
     def __init__(
             self,
             inp,
             conv_pool_layers_params,
             fully_connected_layer_params):
+        """
+        Initialization of network.
+        Parameters:
+        *inp: Either a 2D tensor (to be transformed into 4D later)
+            or a 4D tensor in format (n_batches, n_inp_maps, maps_h, maps_w).
+        *conv_pool_layers_params: List of tuples in format (conv, pool).
+            Each tuple represents a convolution-pooling layer.
+            conv is a dict with arguments for ConvolutionLayer class.
+            pool is a dict with arguments for PoolingLayer class (can be None).
+            Some parameters can be inferred, e.g. number of input maps for conv
+            layer n+1 (since number of output maps for conv layer n is known).
+        *fully_connected_layer_params: Dictionary for parameters for class
+            mlp.MultiLayerPerceptron. n_inp parameter can be inferred.
+        """
 
         inp_maps_shape = conv_pool_layers_params[0][0]["inp_maps_shape"]
 
@@ -173,20 +214,25 @@ class ConvolutionalNeuralNetwork:
             inp = inp.reshape((inp.shape[0], n_inp_maps) + inp_maps_shape)
         self.inp = inp
 
-        #weights and biases
+        #initial parameters
         self.params = []
 
-        #height and width
-        end_maps_hw = inp_maps_shape
-        print("EMS begin:", end_maps_hw)
+        #conv-pool layers
         self.conv_pool_layers = []
+
+        #this tuple keeps track of outputs shape in last conv-pool layer
+        end_maps_hw = inp_maps_shape
+
+        #adding layers
         for i, (conv_params, pool_params) in enumerate(conv_pool_layers_params):
+            #current layer dict
             layer = {"pool": None}
 
             #input for layer
             layer["input"] = self.inp if i == 0 else \
                 self.conv_pool_layers[i-1]["output"]
 
+            #inferring some conv parameters
             if not "n_inp_maps" in conv_params and i > 0:
                 conv_params["n_inp_maps"] = \
                     self.conv_pool_layers[-1]["conv"].n_out_maps
@@ -199,12 +245,9 @@ class ConvolutionalNeuralNetwork:
                 **conv_params)
             layer["conv"] = conv
 
-            print("a", end_maps_hw)
-            print(conv.filter_shape)
-            #exit()
+            #updating final output shape
             end_maps_hw = _dim_after_conv_nd(
                 end_maps_hw, conv.filter_shape, (1, 1))
-            print("%d EMS af conv:" % i, end_maps_hw)
 
             #layer parameters
             layer["params"] = conv.params
@@ -215,34 +258,43 @@ class ConvolutionalNeuralNetwork:
                     inp=conv.output,
                     **pool_params)
                 layer["pool"] = pool
+
                 #updating parameters
                 layer["params"] += pool.params
+
+                #updating final output shape
                 end_maps_hw = _dim_after_conv_nd(
                     end_maps_hw, pool.shape, pool.stride)
-                print("%d EMS af pool:" % i, end_maps_hw)
 
             #layer output
             layer["output"] = pool.output if layer["pool"] else conv.output
 
+            #appending layer dict to list of conv-pool layers
             self.conv_pool_layers.append(layer)
+
+            #updating parameters list for model
             self.params.extend(layer["params"])
 
+        #inferring n_inp if necessary
         if not "n_inp" in fully_connected_layer_params:
             n_maps_inp = self.conv_pool_layers[-1]["conv"].n_out_maps
             n_inps_per_map = end_maps_hw[0]*end_maps_hw[1]
             fully_connected_layer_params["n_inp"] = n_inps_per_map*n_maps_inp
-            print("not n_inp but ok:",
-                n_inps_per_map, n_maps_inp, n_inps_per_map*n_maps_inp)
 
+        #creating fully connected layer
         self.fully_connected_layer = mlp.MultiLayerPerceptron(
             inp=self.conv_pool_layers[-1]["output"].flatten(2),
             **fully_connected_layer_params)
 
+        #updating parameters
         self.params.extend(self.fully_connected_layer.params)
 
+        #model cost(y) function
         self.cost = self.fully_connected_layer.cost
 
+        #model score(y) function
         self.score = self.fully_connected_layer.score
 
+        #model regularization function
         self.reg = self.fully_connected_layer.reg +\
             sum(layer["conv"].reg for layer in self.conv_pool_layers)

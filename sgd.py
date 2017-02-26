@@ -33,7 +33,7 @@ def sgd(est,
         learning_rate=0.1, reg_term=0.1,
         batch_size=1, n_epochs=None,
         max_its=10000, rel_tol=1e-3,
-        x=None, y=tensor.ivector(name="sgd.sgd_y"),
+        x=None, y=None,
         verbose=True, print_flush_period=100):
     """
     Stochastic Gradient Descent with regularization.
@@ -43,8 +43,8 @@ def sgd(est,
         .reg: regularization term of cost function
         .params: iterable with model parameters
         .inp: input (only needed if x is None).
-    *x_tr: x input matrix.
-    *y_tr: y output vector.
+    *x_tr: x input matrix (shared).
+    *y_tr: y output vector (shared).
     *learning_rate: Learning rate.
     *reg_term: Regularization term.
     *batch_size: Samples for each batch. If None, batch_size = n_samples.
@@ -53,13 +53,19 @@ def sgd(est,
     *max_its: Maximum number of iterations to run.
     *rel_tol: Relative difference of current/last batch cost. Not used if None.
     *x: Input. If None, x is set to reg.inp.
-    *y: Output vector.
+    *y: Output vector. If None, is set to theano.tensor.ivector.
     *verbose: Print info if True, print nothing otherwise.
     *print_flush_period: Period to flush printed information.
     """
 
     #info function, only prints something if verbose is True
     info = print if verbose else lambda *args, **kwargs: None
+
+    #setting up x
+    if x is None:
+        x = est.inp
+    if y is None:
+        y = tensor.ivector(name="sgd.sgd_y")
 
     #setting batch size
     n_samples = x_tr.get_value(borrow=True).shape[0]
@@ -75,10 +81,6 @@ def sgd(est,
     #updates variables
     updates = [(p, p - learning_rate*(d_cost_p + reg_term*d_reg_p)) \
         for p, d_cost_p, d_reg_p in grad]
-
-    #setting up x
-    if x is None:
-        x = est.inp
 
     #compiling function
     info("making func...", end="", flush=True)
@@ -163,7 +165,7 @@ def sgd_with_validation(est,
         batch_size=1, n_epochs=10,
         max_its=5000, improv_thresh=0.01, max_its_incr=4,
         rel_val_tol=1e-3, val_freq="auto",
-        x=None, y=tensor.ivector(name="sgd.sgd_with_validation_y"),
+        x=None, y=None,
         verbose=True, print_flush_period=100):
     """
     Stochastic Gradient Descent with regularization using validation set.
@@ -174,10 +176,10 @@ def sgd_with_validation(est,
         .params: iterable with model parameters
         .score(y): accuracy function (in [0, 1])
         .inp: input (only needed if x is None).
-    *x_tr: x train input matrix shared var.
-    *y_tr: y train output vector shared var.
-    *x_cv: x validation input matrix shared var.
-    *y_cv: y validation output vector shared var.
+    *x_tr: x train input matrix (shared).
+    *y_tr: y train output vector (shared).
+    *x_cv: x validation input matrix (shared).
+    *y_cv: y validation output vector (shared).
     *learning_rate: Learning rate.
     *reg_term: Regularization term.
     *batch_size: Samples for each batch. If None, batch_size = n_samples.
@@ -190,13 +192,20 @@ def sgd_with_validation(est,
     *rel_val_tol: If abs(1 - new_val_score/old_val_score) <= rel_val_tol, stop.
     *val_freq: Frequency (in batches) to perform validation.
     *x: Input. If None, x is set to reg.inp.
-    *y: Output.
+    *y: Output. If None, y is set to theano.tensor.ivector.
     *verbose: Print info if True, print nothing otherwise.
     *print_flush_period: Period to flush printed information.
     """
 
     #info function, only prints something if verbose is True
     info = print if verbose else lambda *args, **kwargs: None
+
+    #setting up x
+    if x is None:
+        x = est.inp
+    #setting up y
+    if y is None:
+        y = tensor.ivector(name="sgd.sgd_with_validation_y")
 
     #setting batch size
     n_train_samples = x_tr.get_value(borrow=True).shape[0]
@@ -214,10 +223,6 @@ def sgd_with_validation(est,
     updates = [(p, p - learning_rate*(d_cost_p + reg_term*d_reg_p)) \
         for p, d_cost_p, d_reg_p in grad]
 
-    #setting up x
-    if x is None:
-        x = est.inp
-
     #compiling functions
     info("making train/val func...", end="", flush=True)
     train_f = theano.function(
@@ -233,7 +238,6 @@ def sgd_with_validation(est,
         outputs=est.score(y),
         updates=updates,
         givens={
-            #est.inp: x_cv[index*batch_size:(index+1)*batch_size],
             x: x_cv[index*batch_size:(index+1)*batch_size],
             y: y_cv[index*batch_size:(index+1)*batch_size]
         })

@@ -50,10 +50,9 @@ def main():
             "n_out_maps": 5,
             "filter_shape": (5, 5),
         },
-        None,
-        #{#pool
-        #    "shape": (2, 2)
-        #}
+        {#pool
+            "shape": (2, 2)
+        }
     )
 
     layer_1_params = (
@@ -105,11 +104,11 @@ def main():
         print("calling sgd_with_validation", flush=True)
         sgd.sgd_with_validation(clf,
             x_tr_sh, y_tr_sh, x_cv_sh, y_cv_sh,
-            learning_rate=0.01, reg_term=0.00005,
-            batch_size=batch_size, n_epochs=1000,
-            max_its=100, improv_thresh=0.01, max_its_incr=4,
+            learning_rate=0.0001, reg_term=0.00001,
+            batch_size=250, n_epochs=32,
+            max_its=20000, improv_thresh=0.01, max_its_incr=4,
             x=x,
-            rel_val_tol=5e-1,
+            rel_val_tol=5e-3,
             val_freq="auto",
             verbose=True)
     else:
@@ -123,8 +122,8 @@ def main():
             verbose=True)
 
     print(clf.params[0].get_value(borrow=True).mean())
-    print("accuracy: %.2f%%" % (100*acc(x_tr[:batch_size//batch_size,:],
-        y_tr[:batch_size//batch_size])))
+    print("accuracy: %.2f%%" % (100*acc(x_tr[:batch_size*4,:],
+        y_tr[:batch_size*4])))
 
 if __name__ == "__main__":
     main()

@@ -44,6 +44,8 @@ def main():
             rel_val_tol=1e-3,
             verbose=True)
     else:
+        x_tr_sh = theano.shared(x_data, borrow=True)
+        y_tr_sh = theano.shared(y_data, borrow=True)
         print("calling sgd")
         sgd.sgd(clf, 
             x_tr_sh, y_tr_sh, y=y,
@@ -55,7 +57,7 @@ def main():
             verbose=True)
 
     acc = theano.function([x, y], clf.score(y))
-    print("accuracy: %.2f%%" % (100*acc(x_tr, y_tr)))
+    print("accuracy: %.2f%%" % (100*acc(x_data, y_data)))
 
 if __name__ == "__main__":
     main()

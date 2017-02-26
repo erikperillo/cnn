@@ -24,10 +24,25 @@ def _grad(cost, wrt):
     except theano.gradient.DisconnectedInputError:
         return 0
 
-class LogisticRegression(object):
-    def __init__(self, inp, n_inp, n_out, reg="l2"):
+class LogisticRegression:
+    """
+    Logistic Regression.
+    """
+    def __init__(
+            self,
+            inp,
+            n_inp, n_out,
+            reg="l2"):
+        """
+        Initialization.
+        Parameters:
+        *inp: Input tensor.
+        *n_inp: Number of inputs.
+        *n_out: Number of oututs.
+        *reg: Regularization method for weights.
+        """
 
-        #input/output matrices
+        #input
         self.inp = inp
 
         #creating weights matrix w
@@ -44,15 +59,15 @@ class LogisticRegression(object):
                 dtype=self.w.dtype),
             name='b')
 
+        #model parameters
+        self.params = [self.w, self.b]
+
         #prob of y given x symbolic expression
         self.p_y_given_x = tensor.nnet.softmax(
             tensor.dot(self.inp, self.w) + self.b)
 
         #prediction symbolic expression
         self.pred = tensor.argmax(self.p_y_given_x, axis=1)
-
-        #model parameters
-        self.params = [self.w, self.b]
 
         #regularization term symbolic expression
         if isinstance(reg, str):
@@ -64,10 +79,20 @@ class LogisticRegression(object):
         self.reg = reg(self.w)
 
     def cost(self, y):
+        """
+        Symbolic expression for computing cost via negative log likelihood.
+        Parameters:
+        *y: output tensor.
+        """
         y_indexes = tensor.arange(y.shape[0])
         log_probs = tensor.log(self.p_y_given_x)
         neg_log_likelihood = -log_probs[y_indexes, y]
         return neg_log_likelihood.sum()
 
     def score(self, y):
+        """
+        Symbolic expression for computing score (accuracy).
+        Parameters:
+        *y: output tensor.
+        """
         return tensor.mean(tensor.eq(self.pred, y))
