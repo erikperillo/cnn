@@ -1,0 +1,6 @@
+*.swp
+~*
+data/
+models/
+*.pyc
+*.pyo

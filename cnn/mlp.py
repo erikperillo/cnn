@@ -172,3 +172,6 @@ class MultiLayerPerceptron:
 
         #score(y) function
         self.score = self.log_reg_layer.score
+
+        #pred function
+        self.pred = self.log_reg_layer.pred

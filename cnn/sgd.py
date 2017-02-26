@@ -110,13 +110,17 @@ def sgd(est,
     rel_batch_cost = None
     #criterium that made algorithm stop
     stop_crit = None
+    #message of the end
+    end_msg = ""
 
     #main loop
     info("starting optimization")
     while not done_looping:
+        batch_cost_sum = 0
+
         #epochs stopping criteria
         if n_epochs and epoch_count >= n_epochs:
-            info("\nWARNING: reached number of epochs")
+            end_msg = "\nWARNING: reached number of epochs"
             done_looping = True
             stop_crit = "n_epochs"
             continue
@@ -124,20 +128,21 @@ def sgd(est,
         #iterating over batches
         for batch_idx in range(n_batches):
             batch_cost = train_f(batch_idx)
+            batch_cost_sum += batch_cost
 
             elapsed_time = time.time() - start_time
-            info(("\r[elapsed_time %s][iter %d/%s][epoch %d/%s][batch %d/%d] "
-                "batch_cost: %.4g | rel_batch_cost: %s%s") %\
-                (_str_fmt_time(elapsed_time), it_count+1, _none_or_num(max_its),
-                epoch_count+1, _none_or_num(n_epochs), batch_idx+1, 
-                n_batches, batch_cost, _none_or_num(rel_batch_cost),
-                8*" "), end="", flush=it_count%print_flush_period == 0)
- 
+            info(("\r[elapsed_time %s][epoch %d/%s][iter %d/%s][batch %d/%d] "
+                "batch_cost: %.4g%s") %\
+                (_str_fmt_time(elapsed_time), epoch_count+1,
+                _none_or_num(n_epochs), it_count+1, _none_or_num(max_its),
+                batch_idx+1, n_batches, batch_cost, 8*" "),
+                end="", flush=it_count%print_flush_period == 0)
+
             #relative cost stopping criteria
             if last_batch_cost and rel_tol:
                 rel_batch_cost = abs(1 - last_batch_cost/batch_cost)
                 if rel_batch_cost <= rel_tol:
-                    info("\nWARNING: rel_tol criteria matched")
+                    end_msg = "\nWARNING: rel_tol criteria matched"
                     done_looping = True
                     stop_crit = "rel_tol"
                     break
@@ -145,15 +150,20 @@ def sgd(est,
             #iterations number stopping criteria
             it_count += 1
             if max_its and it_count >= max_its:
-                info("\nWARNING: maximum iterations reached")
+                end_msg = "\nWARNING: maximum iterations reached"
                 done_looping = True
                 stop_crit = "max_its"
                 break
 
             last_batch_cost = batch_cost
 
+        mean_batch_cost = batch_cost_sum/n_batches
+        info(("\n\tnew epoch. mean_batch_cost: %.4g | best_val_score: %f | "
+            "rel_val_score: %s") %\
+            (mean_batch_cost, best_val_score, _none_or_num(rel_val_score)))
         epoch_count += 1
 
+    info(end_msg)
     elapsed_time = time.time() - start_time
     info("[end of sgd] total elapsed time: %s\n" % _str_fmt_time(elapsed_time))
 
@@ -266,13 +276,17 @@ def sgd_with_validation(est,
     start_time = time.time()
     #criterium that made algorithm stop
     stop_crit = None
+    #message of end
+    end_msg = ""
 
     #main loop
     info("starting optimization")
     while not done_looping:
+        batch_cost_sum = 0
+
         #epochs stopping criteria
         if n_epochs and epoch_count >= n_epochs:
-            info("\nWARNING: reached number of epochs")
+            end_msg = "\nWARNING: reached number of epochs"
             done_looping = True
             stop_crit = "n_epochs"
             continue
@@ -280,17 +294,9 @@ def sgd_with_validation(est,
         #iterating over batches
         for batch_idx in range(n_train_batches):
             batch_cost = train_f(batch_idx)
-
-            elapsed_time = time.time() - start_time
-            info(("\r[elapsed_time %s][iter %d/%s][epoch %d/%s][batch %d/%d] "
-                "batch_cost: %.4g | best_val_score: %s | rel_val_score: %s%s")%\
-                (_str_fmt_time(elapsed_time), it_count+1, _none_or_num(max_its),
-                epoch_count+1, _none_or_num(n_epochs), batch_idx+1, 
-                n_train_batches, batch_cost, _none_or_num(best_val_score), 
-                _none_or_num(rel_val_score), 8*" "),
-                end="", flush=it_count%print_flush_period == 0)
-            
-            if it_count and it_count%val_freq == 0:
+            batch_cost_sum += batch_cost
+             
+            if (it_count+1)%val_freq == 0:
                 val_score = np.mean([val_f(i) for i in range(n_val_batches)])
 
                 if best_val_score is None or val_score > best_val_score:
@@ -305,24 +311,38 @@ def sgd_with_validation(est,
                 if last_val_score and rel_val_tol:
                     rel_val_score = abs(1 - last_val_score/val_score)
                     if rel_val_score <= rel_val_tol:
-                        info("\nWARNING: rel_val_tol criteria matched (%f)" %\
-                            rel_val_score)
+                        end_msg = \
+                            "\nWARNING: rel_val_tol criteria matched (%f)" %\
+                            rel_val_score
                         done_looping = True
                         stop_crit = "rel_val_tol"
                         break
 
                 last_val_score = val_score
 
+            elapsed_time = time.time() - start_time
+            info(("\r[elapsed_time %s][epoch %d/%s][iter %d/%s][batch %d/%d] "
+                "batch_cost: %.4g%s") %\
+                (_str_fmt_time(elapsed_time), epoch_count+1,
+                _none_or_num(n_epochs), it_count+1, _none_or_num(max_its),
+                batch_idx+1, n_train_batches, batch_cost, 8*" "),
+                end="", flush=it_count%print_flush_period == 0)
+
             #iterations number stopping criteria
             it_count += 1
             if max_its and it_count >= max_its:
-                info("\nWARNING: maximum iterations reached")
+                end_msg = "\nWARNING: maximum iterations reached"
                 done_looping = True
                 stop_crit = "max_its"
                 break
 
+        mean_batch_cost = batch_cost_sum/n_train_batches
+        info(("\n\tnew epoch. mean_batch_cost: %.4g | best_val_score: %f | "
+            "rel_val_score: %s") %\
+            (mean_batch_cost, best_val_score, _none_or_num(rel_val_score)))
         epoch_count += 1
 
+    info(end_msg)
     elapsed_time = time.time() - start_time
     info("[end of sgd_with_validation] elapsed time: %s\n" %\
         _str_fmt_time(elapsed_time))

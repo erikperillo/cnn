@@ -295,6 +295,9 @@ class ConvolutionalNeuralNetwork:
         #model score(y) function
         self.score = self.fully_connected_layer.score
 
+        #pred function
+        self.pred = self.fully_connected_layer.pred
+
         #model regularization function
         self.reg = self.fully_connected_layer.reg +\
             sum(layer["conv"].reg for layer in self.conv_pool_layers)
