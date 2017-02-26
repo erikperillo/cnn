@@ -29,22 +29,22 @@ def _str_fmt_time(seconds):
     return "%.3dh:%.2dm:%.2ds" % (hours, minutes, seconds)
 
 def sgd(est, 
-        x_tr, y_tr,
+        x_data, y_data,
         learning_rate=0.1, reg_term=0.1,
         batch_size=1, n_epochs=None,
         max_its=10000, rel_tol=1e-3,
-        x=None, y=tensor.ivector(name="sgd.sgd_y"),
+        y=tensor.ivector(name="y"),
         verbose=True, print_flush_period=100):
     """
     Stochastic Gradient Descent with regularization.
     Parameters:
     *est: Estimator object. It must have the following attributes:
+        .inp: input
         .cost(y): cost function (without regularization term)
         .reg: regularization term of cost function
         .params: iterable with model parameters
-        .inp: input (only needed if x is None).
-    *x_tr: x input matrix.
-    *y_tr: y output vector.
+    *x_data: x input matrix.
+    *y_data: y output vector.
     *learning_rate: Learning rate.
     *reg_term: Regularization term.
     *batch_size: Samples for each batch. If None, batch_size = n_samples.
@@ -52,7 +52,6 @@ def sgd(est,
         If None, runs until another stopping criteria.
     *max_its: Maximum number of iterations to run.
     *rel_tol: Relative difference of current/last batch cost. Not used if None.
-    *x: Input. If None, x is set to reg.inp.
     *y: Output vector.
     *verbose: Print info if True, print nothing otherwise.
     *print_flush_period: Period to flush printed information.
@@ -62,12 +61,18 @@ def sgd(est,
     info = print if verbose else lambda *args, **kwargs: None
 
     #setting batch size
-    n_samples = x_tr.get_value(borrow=True).shape[0]
+    n_samples = x_data.shape[0]
     if batch_size is None:
         batch_size = n_samples
 
     #variable for indexing training samples
     index = tensor.lscalar(name="index")
+
+    #shared objects
+    x_data_shared = theano.shared(np.asarray(x_data, dtype=x_data.dtype),
+        borrow=True)
+    y_data_shared = theano.shared(np.asarray(y_data, dtype=y_data.dtype),
+        borrow=True)
 
     #parameters gradient of estimator
     grad = [(p, _grad(est.cost(y), p), _grad(est.reg, p)) for p in est.params]
@@ -76,10 +81,6 @@ def sgd(est,
     updates = [(p, p - learning_rate*(d_cost_p + reg_term*d_reg_p)) \
         for p, d_cost_p, d_reg_p in grad]
 
-    #setting up x
-    if x is None:
-        x = est.inp
-
     #compiling function
     info("making func...", end="", flush=True)
     train_f = theano.function(
@@ -87,8 +88,8 @@ def sgd(est,
         outputs=est.cost(y),
         updates=updates,
         givens={
-            x: x_tr[index*batch_size:(index+1)*batch_size],
-            y: y_tr[index*batch_size:(index+1)*batch_size]
+            est.inp: x_data_shared[index*batch_size:(index+1)*batch_size],
+            y: y_data_shared[index*batch_size:(index+1)*batch_size]
         })
     info(" done")
 
@@ -158,26 +159,28 @@ def sgd(est,
     return stop_crit
 
 def sgd_with_validation(est, 
-        x_tr, y_tr, x_cv, y_cv,
+        x_train_data, y_train_data,
+        x_val_data, y_val_data,
         learning_rate=0.1, reg_term=0.1,
         batch_size=1, n_epochs=10,
         max_its=5000, improv_thresh=0.01, max_its_incr=4,
         rel_val_tol=1e-3, val_freq="auto",
-        x=None, y=tensor.ivector(name="sgd.sgd_with_validation_y"),
+        x=None,
+        y=tensor.ivector(name="y"),
         verbose=True, print_flush_period=100):
     """
     Stochastic Gradient Descent with regularization using validation set.
     Parameters:
     *est: Estimator object. It must have the following attributes:
+        .inp: input
         .cost(y): cost function (without regularization term)
         .reg: regularization term of cost function
         .params: iterable with model parameters
         .score(y): accuracy function (in [0, 1])
-        .inp: input (only needed if x is None).
-    *x_tr: x train input matrix shared var.
-    *y_tr: y train output vector shared var.
-    *x_cv: x validation input matrix shared var.
-    *y_cv: y validation output vector shared var.
+    *x_train_data: x train input matrix.
+    *y_train_data: y train output vector.
+    *x_val_data: x validation input matrix.
+    *y_val_data: y validation output vector.
     *learning_rate: Learning rate.
     *reg_term: Regularization term.
     *batch_size: Samples for each batch. If None, batch_size = n_samples.
@@ -189,8 +192,7 @@ def sgd_with_validation(est,
     *max_its_incr: Max iterations to increase when finding a new best val_score.
     *rel_val_tol: If abs(1 - new_val_score/old_val_score) <= rel_val_tol, stop.
     *val_freq: Frequency (in batches) to perform validation.
-    *x: Input. If None, x is set to reg.inp.
-    *y: Output.
+    *y: Output vector.
     *verbose: Print info if True, print nothing otherwise.
     *print_flush_period: Period to flush printed information.
     """
@@ -199,13 +201,50 @@ def sgd_with_validation(est,
     info = print if verbose else lambda *args, **kwargs: None
 
     #setting batch size
-    n_train_samples = x_tr.get_value(borrow=True).shape[0]
-    n_val_samples = x_cv.get_value(borrow=True).shape[0]
+    n_train_samples = x_train_data.get_value(borrow=True).shape[0]
+    n_val_samples = x_val_data.get_value(borrow=True).shape[0]
     if batch_size is None:
         batch_size = n_train_samples
 
     #variable for indexing training samples
     index = tensor.lscalar(name="index")
+
+    #shared objects
+    """x_train_data_shared = theano.shared(
+        np.asarray(x_train_data, dtype=x_train_data.dtype), borrow=True)
+    y_train_data_shared = theano.shared(
+        np.asarray(y_train_data, dtype=y_train_data.dtype), borrow=True)
+    x_val_data_shared = theano.shared(
+        np.asarray(x_val_data, dtype=x_val_data.dtype), borrow=True)
+    y_val_data_shared = theano.shared(
+        np.asarray(y_val_data, dtype=y_val_data.dtype), borrow=True)"""
+    x_train_data_shared = x_train_data
+    y_train_data_shared = y_train_data
+    x_val_data_shared = x_val_data
+    y_val_data_shared = y_val_data
+    print("xtr, ytr:", type(x_train_data_shared), type(y_train_data_shared))
+    print("inp, y:", type(est.inp), type(y))
+    print("WOW>--------------_")
+    print("x_train_data_shared:")
+    print("\tname:", x_train_data_shared.name, "type:",
+        x_train_data_shared.type, "value:", x_train_data_shared.get_value(),
+        #"strict:", x_train_data_shared.strict,
+        "container:", x_train_data_shared.container)
+    print("y_train_data_shared:")
+    print("\tname:", y_train_data_shared.name, "type:",
+        y_train_data_shared.type)#"value:", y_train_data_shared.get_value(),
+        #"strict:", y_train_data_shared.strict,
+        #"container:", y_train_data_shared.container)
+    print("est.inp:")
+    print("\tname:", est.inp.name, "type:",
+        est.inp.type)#, "value:", est.inp.get_value(),
+        #"strict:", est.inp.strict,
+        #"container:", est.inp.container)
+    print("y:")
+    print("\tname:", y.name, "type:",
+        y.type)#, "value:", y.get_value(),
+        #"strict:", y.strict,
+    #exit()
 
     #parameters gradient of estimator
     grad = [(p, _grad(est.cost(y), p), _grad(est.reg, p)) for p in est.params]
@@ -214,10 +253,7 @@ def sgd_with_validation(est,
     updates = [(p, p - learning_rate*(d_cost_p + reg_term*d_reg_p)) \
         for p, d_cost_p, d_reg_p in grad]
 
-    #setting up x
-    if x is None:
-        x = est.inp
-
+    #x = tensor.matrix("x")
     #compiling functions
     info("making train/val func...", end="", flush=True)
     train_f = theano.function(
@@ -225,17 +261,18 @@ def sgd_with_validation(est,
         outputs=est.cost(y),
         updates=updates,
         givens={
-            x: x_tr[index*batch_size:(index+1)*batch_size],
-            y: y_tr[index*batch_size:(index+1)*batch_size]
+            #est.inp: x_train_data_shared[index*batch_size:(index+1)*batch_size],
+            x: x_train_data_shared[index*batch_size:(index+1)*batch_size],
+            y: y_train_data_shared[index*batch_size:(index+1)*batch_size]
         })
     val_f = theano.function(
         inputs=[index],
         outputs=est.score(y),
         updates=updates,
         givens={
-            #est.inp: x_cv[index*batch_size:(index+1)*batch_size],
-            x: x_cv[index*batch_size:(index+1)*batch_size],
-            y: y_cv[index*batch_size:(index+1)*batch_size]
+            #est.inp: x_val_data_shared[index*batch_size:(index+1)*batch_size],
+            x: x_val_data_shared[index*batch_size:(index+1)*batch_size],
+            y: y_val_data_shared[index*batch_size:(index+1)*batch_size]
         })
     info(" done")
 

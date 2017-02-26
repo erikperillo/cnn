@@ -11,14 +11,18 @@ import pickle
 
 DATA_FILEPATH = "../data/mnist.pkl.gz"
 
+def cvt_type(xy_set, x_dtype="float64", y_dtype="int32"):
+    x_set, y_set = xy_set
+    return np.array(x_set, dtype=x_dtype), np.array(y_set, dtype=y_dtype)
+
 def load_data(filepath):
     with gzip.open(filepath, "rb") as f:
         try:
             dataset = pickle.load(f, encoding="latin1")
         except:
-            raise
+            dataset = pickle.load(f)
 
-    return dataset
+    return tuple(map(cvt_type, dataset))
 
 def main():
     print("loading data...", end="", flush=True)
@@ -42,17 +46,18 @@ def main():
         n_in=x_tr.shape[1], n_hidden=64, n_out=10)
 
     acc = theano.function([x, y], clf.score(y))
-    with_validation = True
-    x_tr = np.array(x_tr, dtype="float64")
-    y_tr = np.array(y_tr, dtype="int32")
+
+    with_validation = False
+
+    x_tr_sh = theano.shared(x_tr, borrow=True)
+    y_tr_sh = theano.shared(y_tr, borrow=True)
+    x_cv_sh = theano.shared(x_cv, borrow=True)
+    y_cv_sh = theano.shared(y_cv, borrow=True)
+
     if with_validation:
         print("calling sgd_with_validation", flush=True)
-        x_cv = np.array(x_cv, dtype="float64")
-        x_te = np.array(x_te, dtype="float64")
-        y_cv = np.array(y_cv, dtype="int32")
-        y_te = np.array(y_te, dtype="int32")
         sgd.sgd_with_validation(clf,
-            x_tr, y_tr, x_cv, y_cv,
+            x_tr_sh, y_tr_sh, x_cv_sh, y_cv_sh,
             learning_rate=0.01, reg_term=0.00005,
             batch_size=256, n_epochs=1000,
             max_its=5000, improv_thresh=0.01, max_its_incr=4,
@@ -62,12 +67,11 @@ def main():
         print("accuracy: %.2f%%" % (100*acc(x_te, y_te)))
     else:
         print("calling sgd")
-        sgd.sgd(clf, x_tr, y_tr,
-            learning_rate=0.1,
-            reg_term=1,
-            batch_size=32,
+        sgd.sgd(clf, 
+            x_tr_sh, y_tr_sh,
+            learning_rate=0.1, reg_term=1,
+            batch_size=32, n_epochs=128,
             rel_tol=2e-3,
-            n_epochs=128,
             verbose=True)
         print("accuracy: %.2f%%" % (100*acc(x_tr, y_tr)))
 

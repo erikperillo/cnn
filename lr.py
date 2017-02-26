@@ -25,7 +25,7 @@ def _grad(cost, wrt):
         return 0
 
 class LogisticRegression(object):
-    def __init__(self, inp, n_in, n_out, reg="l2"):
+    def __init__(self, inp, n_inp, n_out, reg="l2"):
 
         #input/output matrices
         self.inp = inp
@@ -33,7 +33,7 @@ class LogisticRegression(object):
         #creating weights matrix w
         self.w = theano.shared(
             np.zeros(
-                shape=(n_in, n_out),
+                shape=(n_inp, n_out),
                 dtype=self.inp.dtype),
             name='w')
 

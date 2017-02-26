@@ -29,11 +29,15 @@ def main():
         val_samples = int(n_samples*val_frac)
         train_samples = n_samples - val_samples
         x_tr, y_tr = x_data[:train_samples, :], y_data[:train_samples]
+        x_tr_sh = theano.shared(x_tr, borrow=True)
+        y_tr_sh = theano.shared(y_tr, borrow=True)
         x_val, y_val = (x_data[train_samples:(train_samples+val_samples), :],
             y_data[train_samples:(train_samples+val_samples)])
+        x_val_sh = theano.shared(x_val, borrow=True)
+        y_val_sh = theano.shared(y_val, borrow=True)
         print("calling sgd_with_validation")
         sgd.sgd_with_validation(clf,
-            x_tr, y_tr, x_val, y_val,
+            x_tr_sh, y_tr_sh, x_val_sh, y_val_sh,
             learning_rate=0.01, reg_term=0.0001,
             batch_size=32, n_epochs=1000,
             max_its=10000, improv_thresh=0.01, max_its_incr=4,
@@ -42,7 +46,7 @@ def main():
     else:
         print("calling sgd")
         sgd.sgd(clf, 
-            x_data, y_data, y=y,
+            x_tr_sh, y_tr_sh, y=y,
             learning_rate=0.01,
             reg_term=0.0001,
             batch_size=220,
@@ -51,7 +55,7 @@ def main():
             verbose=True)
 
     acc = theano.function([x, y], clf.score(y))
-    print("accuracy: %.2f%%" % (100*acc(x_data, y_data)))
+    print("accuracy: %.2f%%" % (100*acc(x_tr, y_tr)))
 
 if __name__ == "__main__":
     main()

@@ -12,10 +12,6 @@ import pickle
 
 DATA_FILEPATH = "../data/mnist.pkl.gz"
 
-def cvt_type(xy_set, x_dtype="float64", y_dtype="int32"):
-    x_set, y_set = xy_set
-    return np.array(x_set, dtype=x_dtype), np.array(y_set, dtype=y_dtype)
-
 def load_data(filepath):
     with gzip.open(filepath, "rb") as f:
         try:
@@ -23,7 +19,7 @@ def load_data(filepath):
         except:
             raise
 
-    return tuple(map(cvt_type, dataset))
+    return dataset
 
 def main():
     print("loading data...", end="", flush=True)
@@ -45,21 +41,19 @@ def main():
 
     layer_0_params = (
         {#conv
-            "n_inp_maps": 1,
-            "inp_maps_shape": (28, 28),
-            "n_out_maps": 5,
+            "n_in_maps": 1,
+            "n_out_maps": 4,
             "filter_shape": (5, 5),
         },
-        None,
-        #{#pool
-        #    "shape": (2, 2)
-        #}
+        {#pool
+            "shape": (2, 2)
+        }
     )
 
     layer_1_params = (
         {#conv
-            #"n_in_maps": 4,
-            "n_out_maps": 10,
+            "n_in_maps": 4,
+            "n_out_maps": 8,
             "filter_shape": (5, 5),
         },
         {#pool
@@ -68,50 +62,61 @@ def main():
     )
 
     fully_connected_layer_params = {
-        #"n_inp": 10*4*4,
-        "n_hidden": 64,
+        "n_in": 8*4*4,
+        "n_hidden": 32,
         "n_out": 10
     }
 
-    batch_size = 32
-    bs = tensor.iscalar()
-    #inp = x.reshape((batch_size, 1, 28, 28))
-    #inp = x.reshape((bs, 1, 28, 28))
-    inp = x.reshape((x.shape[0], 1, 28, 28))
-    #print(inp.shape[1].value)
+    batch_size = 64
+    print("HMM:", x.type)
+    inp = x.reshape((batch_size, 1, 28, 28))
 
+    print("hmmm:", inp.type)
     clf = cnn.ConvolutionalNeuralNetwork(
-        #inp=inp,
-        inp=x,
+        inp=inp,
         conv_pool_layers_params=[
             layer_0_params,
             layer_1_params],
         fully_connected_layer_params=fully_connected_layer_params)
-    #exit()
+
+    print("ok")
 
     acc = theano.function([x, y], clf.score(y))
-    #exit()
-
     with_validation = True
-
-    x_tr_sh = theano.shared(x_tr, borrow=True)
-    y_tr_sh = theano.shared(y_tr, borrow=True)
-    x_cv_sh = theano.shared(x_cv, borrow=True)
-    y_cv_sh = theano.shared(y_cv, borrow=True)
-
-    #print(np.mean(clf.params[0]), np.std(clf.params[0]))
-    print(clf.params[0].get_value(borrow=True).mean())
+    print("ok:", type(x_tr), type(y_tr))
+    x_tr = theano.shared(np.asarray(x_tr, dtype=tensor.config.floatX),
+        borrow=True)
+    y_tr = theano.shared(np.asarray(y_tr, dtype=tensor.config.floatX),
+        borrow=True)
+    x_cv = theano.shared(np.asarray(x_cv, dtype=tensor.config.floatX),
+        borrow=True)
+    y_cv = theano.shared(np.asarray(y_cv, dtype=tensor.config.floatX),
+        borrow=True)
+    print("ok2:", type(x_tr), type(y_tr))
+    def make(x, y):
+        return x, tensor.cast(y, "int32")
+    x_tr, y_tr = make(x_tr, y_tr)
+    x_cv, y_cv = make(x_cv, y_cv)
+    print("ok3:", type(x_tr), type(y_tr))
+    #exit()
+    #x_tr = np.array(x_tr, dtype="float64")
+    #y_tr = np.array(y_tr, dtype="int32")
     if with_validation:
         print("calling sgd_with_validation", flush=True)
+        #x_cv = np.array(x_cv, dtype="float64")
+        #x_te = np.array(x_te, dtype="float64")
+        #y_cv = np.array(y_cv, dtype="int32")
+        #y_te = np.array(y_te, dtype="int32")
         sgd.sgd_with_validation(clf,
-            x_tr_sh, y_tr_sh, x_cv_sh, y_cv_sh,
+            x_tr, y_tr, x_cv, y_cv,
             learning_rate=0.01, reg_term=0.00005,
-            batch_size=batch_size, n_epochs=1000,
-            max_its=100, improv_thresh=0.01, max_its_incr=4,
+            batch_size=64, n_epochs=1000,
+            max_its=5000, improv_thresh=0.01, max_its_incr=4,
             x=x,
-            rel_val_tol=5e-1,
+            rel_val_tol=5e-3,
             val_freq="auto",
             verbose=True)
+        print("accuracy: %.2f%%" % (100*acc(x_te, y_te)))
     else:
         print("calling sgd")
         sgd.sgd(clf, x_tr, y_tr,
@@ -121,10 +126,7 @@ def main():
             rel_tol=2e-3,
             n_epochs=128,
             verbose=True)
-
-    print(clf.params[0].get_value(borrow=True).mean())
-    print("accuracy: %.2f%%" % (100*acc(x_tr[:batch_size//batch_size,:],
-        y_tr[:batch_size//batch_size])))
+        print("accuracy: %.2f%%" % (100*acc(x_tr, y_tr)))
 
 if __name__ == "__main__":
     main()

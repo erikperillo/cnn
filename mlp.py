@@ -11,15 +11,15 @@ def _get_rng(rand_state=None):
         return np.random.RandomState(rand_state)
     return rand_state
 
-def _xavier_tanh_w_init(n_in, n_out, rand_state=42):
+def _xavier_tanh_w_init(n_inp, n_out, rand_state=42):
     rng = _get_rng(rand_state)
-    bound = np.sqrt(6/(n_in + n_out))
-    return rng.uniform(low=-bound, high=bound, size=(n_in, n_out))
+    bound = np.sqrt(6/(n_inp + n_out))
+    return rng.uniform(low=-bound, high=bound, size=(n_inp, n_out))
 
-def _xavier_sigmoid_w_init(n_in, n_out, rand_state=42):
+def _xavier_sigmoid_w_init(n_inp, n_out, rand_state=42):
     rng = _get_rng(rand_state)
-    bound = 4*np.sqrt(6/(n_in + n_out))
-    return rng.uniform(low=-bound, high=bound, size=(n_in, n_out))
+    bound = 4*np.sqrt(6/(n_inp + n_out))
+    return rng.uniform(low=-bound, high=bound, size=(n_inp, n_out))
 
 _W_INIT_METHODS = {
     "xavier_tanh": _xavier_sigmoid_w_init,
@@ -51,7 +51,7 @@ class HiddenLayer(object):
     def __init__(
             self, 
             inp,
-            n_in, n_out,
+            n_inp, n_out,
             activation_f=tensor.tanh,
             w_init_f="xavier_tanh",
             reg="l2",
@@ -71,7 +71,7 @@ class HiddenLayer(object):
         #creating weights matrix w
         self.w = theano.shared(
             np.asarray(
-                w_init_f(n_in, n_out),
+                w_init_f(n_inp, n_out),
                 dtype=self.input.dtype),
             name="w")
 
@@ -107,7 +107,7 @@ class MultiLayerPerceptron:
     def __init__(
             self, 
             inp,
-            n_in, n_hidden, n_out,
+            n_inp, n_hidden, n_out,
             activation_f=tensor.tanh,
             w_init_f="xavier_tanh",
             hl_reg="l2", lr_reg="l2",
@@ -119,14 +119,14 @@ class MultiLayerPerceptron:
         #hidden layer
         self.hidden_layer = HiddenLayer(
             inp=inp,
-            n_in=n_in, n_out=n_hidden,
+            n_inp=n_inp, n_out=n_hidden,
             activation_f=activation_f,
             reg=hl_reg)
 
         #logistic regression layer
         self.log_reg_layer = lr.LogisticRegression(
             inp=self.hidden_layer.output,
-            n_in=n_hidden, n_out=n_out,
+            n_inp=n_hidden, n_out=n_out,
             reg=lr_reg)
 
         #model parameters
